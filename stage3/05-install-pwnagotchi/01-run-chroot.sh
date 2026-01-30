@@ -12,7 +12,7 @@ cd /home/pi
 rm -r lg.zip lg/
 
 if [ ! -d pwnagotchi ]; then
-    git clone https://github.com/jayofelony/pwnagotchi.git
+    git clone https://github.com/MrBumChinz/Pwnagotchi-Fork---Mr-Bumchinz.git pwnagotchi
     cd pwnagotchi/
 else
     cd /home/pi/pwnagotchi/

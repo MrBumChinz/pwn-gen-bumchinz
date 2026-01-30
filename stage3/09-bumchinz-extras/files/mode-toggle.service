@@ -1,0 +1,13 @@
+[Unit]
+Description=Pwnagotchi Mode Toggle (PiSugar Button)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/pi/.pwn/bin/python3 /usr/local/bin/mode_toggle.py
+Restart=always
+RestartSec=5
+User=root
+
+[Install]
+WantedBy=multi-user.target
