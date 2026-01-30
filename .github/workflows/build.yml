@@ -1,0 +1,165 @@
+name: Build Pwnagotchi Images
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      architecture:
+        description: 'Architecture to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - '32bit'
+          - '64bit'
+          - 'both'
+
+jobs:
+  build-32bit:
+    if: ${{ github.event_name == 'push' || github.event.inputs.architecture == '32bit' || github.event.inputs.architecture == 'both' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+      - name: Checkout pwn-gen-bumchinz
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            coreutils quilt parted qemu-user-static debootstrap zerofree zip \
+            dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
+            file git curl bc gpg pigz xxd arch-test bmap-tools kmod \
+            qemu-utils qemu-system-arm
+
+      - name: Clone pi-gen 32bit
+        run: |
+          git clone --depth 1 https://github.com/RPI-Distro/pi-gen.git pi-gen-32bit
+
+      - name: Configure build paths
+        run: |
+          mkdir -p $HOME/pwn-build/work-32bit
+          mkdir -p $HOME/pwn-build/images
+          
+          # Update config with actual home path
+          sed -i "s|\${HOME}|$HOME|g" config-32bit
+
+      - name: Build 32-bit image
+        run: |
+          sudo ./pi-gen-32bit/build.sh -c config-32bit
+
+      - name: Compress and prepare artifact
+        run: |
+          cd $HOME/pwn-build/images
+          ls -la
+          # Find the image file
+          IMAGE=$(find . -name "*.img" | head -1)
+          if [ -n "$IMAGE" ]; then
+            xz -9 -T0 "$IMAGE"
+          fi
+
+      - name: Upload 32-bit image
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwnagotchi-bumchinz-32bit
+          path: ~/pwn-build/images/*.img.xz
+          retention-days: 30
+
+  build-64bit:
+    if: ${{ github.event_name == 'push' || github.event.inputs.architecture == '64bit' || github.event.inputs.architecture == 'both' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    
+    steps:
+      - name: Checkout pwn-gen-bumchinz
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            coreutils quilt parted qemu-user-static debootstrap zerofree zip \
+            dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
+            file git curl bc gpg pigz xxd arch-test bmap-tools kmod \
+            qemu-utils qemu-system-arm gcc-aarch64-linux-gnu
+
+      - name: Clone pi-gen 64bit
+        run: |
+          git clone --depth 1 -b arm64 https://github.com/RPI-Distro/pi-gen.git pi-gen-64bit
+
+      - name: Configure build paths
+        run: |
+          mkdir -p $HOME/pwn-build/work-64bit
+          mkdir -p $HOME/pwn-build/images
+          
+          # Update config with actual home path
+          sed -i "s|\${HOME}|$HOME|g" config-64bit
+
+      - name: Build 64-bit image
+        run: |
+          sudo ./pi-gen-64bit/build.sh -c config-64bit
+
+      - name: Compress and prepare artifact
+        run: |
+          cd $HOME/pwn-build/images
+          ls -la
+          IMAGE=$(find . -name "*.img" | head -1)
+          if [ -n "$IMAGE" ]; then
+            xz -9 -T0 "$IMAGE"
+          fi
+
+      - name: Upload 64-bit image
+        uses: actions/upload-artifact@v4
+        with:
+          name: pwnagotchi-bumchinz-64bit
+          path: ~/pwn-build/images/*.img.xz
+          retention-days: 30
+
+  release:
+    needs: [build-32bit, build-64bit]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Download 32-bit artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pwnagotchi-bumchinz-32bit
+          path: ./release
+
+      - name: Download 64-bit artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: pwnagotchi-bumchinz-64bit
+          path: ./release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: ./release/*.img.xz
+          body: |
+            ## Pwnagotchi Mr Bumchinz Edition
+            
+            ### Downloads
+            - `pwnagotchi-bumchinz-32bit.img.xz` - Works on ALL Pi models (Zero, Zero W, 3, 4, 5)
+            - `pwnagotchi-bumchinz-64bit.img.xz` - Pi 3, 4, 5 only (better performance)
+            
+            ### What's Included
+            - PwnaUI custom theme engine
+            - 17+ themes (pwnachu, pwnaflipper, hologram, mikugotchi, etc)
+            - Mode toggle via PiSugar button
+            - Nexmon stability plugin
+            
+            ### Installation
+            1. Download the appropriate image for your Pi
+            2. Flash with Raspberry Pi Imager or balenaEtcher
+            3. Insert SD card and power on
+            
+            Default credentials: `pi` / `raspberry`
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
