@@ -11,7 +11,6 @@ install -v -m 755 files/bettercap-launcher "${ROOTFS_DIR}/usr/bin/bettercap-laun
 install -v -m 755 files/decryption-webserver "${ROOTFS_DIR}/usr/bin/decryption-webserver"
 install -v -m 755 files/monstart "${ROOTFS_DIR}/usr/bin/monstart"
 install -v -m 755 files/monstop "${ROOTFS_DIR}/usr/bin/monstop"
-install -v -m 755 files/pwnagotchi-launcher "${ROOTFS_DIR}/usr/bin/pwnagotchi-launcher"
 install -v -m 755 files/pwnlib "${ROOTFS_DIR}/usr/bin/pwnlib"
 
 # /etc/
@@ -29,7 +28,6 @@ install -v -m 644 files/modules.conf "${ROOTFS_DIR}/etc/modules-load.d/modules.c
 # /etc/systemd/system/
 echo -e "\e[32m### Installing /etc/systemd/system/ files ###\e[0m"
 install -v -m 644 files/bettercap.service "${ROOTFS_DIR}/etc/systemd/system/bettercap.service"
-install -v -m 644 files/pwnagotchi.service "${ROOTFS_DIR}/etc/systemd/system/pwnagotchi.service"
 install -v -m 644 files/pwngrid-peer.service "${ROOTFS_DIR}/etc/systemd/system/pwngrid-peer.service"
 
 # /etc/update-motd.d/
