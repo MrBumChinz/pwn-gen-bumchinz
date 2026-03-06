@@ -1,5 +1,13 @@
 #!/bin/bash -e
 
+# Skip Go installation if pre-built bettercap and pwngrid binaries are already installed
+# (cross-compiled on x86 host to avoid 12+ hour QEMU ARM emulation builds)
+if [ -f /usr/local/bin/bettercap ] && [ -f /usr/local/bin/pwngrid ]; then
+    echo -e "\e[32m=== Pre-built binaries detected, skipping Go SDK installation ===\e[0m"
+    bettercap -version 2>/dev/null || echo "(binary installed, will work at runtime)"
+    exit 0
+fi
+
 export PATH=$PATH:/usr/local/go/bin
 
 FOUNDARCH="armv6l"

@@ -1,0 +1,11 @@
+# Force LF line endings for shell scripts (critical for Linux execution)
+*.sh text eol=lf
+prerun.sh text eol=lf
+# Config files also need LF
+config-32bit text eol=lf
+config-64bit text eol=lf
+# Keep other text files as-is
+*.md text
+*.yml text
+*.yaml text
+Makefile text eol=lf

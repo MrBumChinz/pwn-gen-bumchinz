@@ -67,6 +67,73 @@ jobs:
           echo "=== Config ==="
           cat config-32bit
 
+      - name: Cross-compile Go binaries
+        run: |
+          # Cross-compile bettercap + pwngrid on x86 host to avoid 12+ hour
+          # QEMU ARM emulation builds that exceed the 6h GitHub Actions timeout.
+          # This step takes ~5 minutes instead.
+
+          echo "=== Installing Go on host ==="
+          GO_VERSION="1.24.4"
+          wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
+          rm "go${GO_VERSION}.linux-amd64.tar.gz"
+          export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+          go version
+
+          echo "=== Setting up armhf cross-compilation libraries ==="
+          sudo dpkg --add-architecture armhf
+          # Restrict existing repos to amd64 to prevent 404 for armhf
+          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list 2>/dev/null || true
+          for f in /etc/apt/sources.list.d/*.list; do
+            [ -f "$f" ] && sudo sed -i 's/^deb http/deb [arch=amd64] http/' "$f" 2>/dev/null || true
+          done
+          # Handle DEB822 format (Ubuntu 24.04+)
+          for f in /etc/apt/sources.list.d/*.sources; do
+            [ -f "$f" ] && ! grep -q "^Architectures:" "$f" && \
+              sudo sed -i '/^Types:/a Architectures: amd64' "$f" 2>/dev/null || true
+          done
+          # Add armhf from Ubuntu ports mirror
+          CODENAME=$(lsb_release -cs)
+          echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports ${CODENAME} main universe" \
+            | sudo tee /etc/apt/sources.list.d/armhf-cross.list
+          echo "deb [arch=armhf] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main universe" \
+            | sudo tee -a /etc/apt/sources.list.d/armhf-cross.list
+          sudo apt-get update
+          sudo apt-get install -y libpcap-dev:armhf libusb-1.0-0-dev:armhf \
+            libnetfilter-queue-dev:armhf 2>/dev/null || \
+            sudo apt-get install -y libpcap-dev:armhf libusb-1.0-0-dev:armhf || \
+            sudo apt-get install -y libpcap-dev:armhf
+
+          mkdir -p stage3/03-bettercap-pwngrid/files
+
+          echo "=== Cross-compiling bettercap for armhf ==="
+          git clone --depth 1 https://github.com/bettercap/bettercap.git /tmp/bettercap-src
+          cd /tmp/bettercap-src
+          CC=arm-linux-gnueabihf-gcc \
+          CGO_ENABLED=1 \
+          GOOS=linux \
+          GOARCH=arm \
+          GOARM=6 \
+          PKG_CONFIG_PATH=/usr/lib/arm-linux-gnueabihf/pkgconfig \
+          CGO_LDFLAGS="-L/usr/lib/arm-linux-gnueabihf" \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/bettercap" .
+          echo "bettercap: OK"
+
+          echo "=== Cross-compiling pwngrid for armhf ==="
+          git clone --depth 1 https://github.com/jayofelony/pwngrid.git /tmp/pwngrid-src
+          cd /tmp/pwngrid-src
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/pwngrid" . 2>/dev/null || \
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm GOARM=6 \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/pwngrid" ./cmd/pwngrid
+          echo "pwngrid: OK"
+
+          echo "=== Pre-built binaries ==="
+          ls -la "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/"
+          file "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/"*
+
       - name: Build 32-bit image
         run: |
           sudo ./pi-gen-32bit/build.sh -c config-32bit
@@ -134,6 +201,65 @@ jobs:
           sed -i "s|^DEPLOY_DIR=.*|DEPLOY_DIR=\"${RUNNER_HOME}/pwn-build/images\"|" config-64bit
           echo "=== Config ==="
           cat config-64bit
+
+      - name: Cross-compile Go binaries
+        run: |
+          echo "=== Installing Go on host ==="
+          GO_VERSION="1.24.4"
+          wget -q "https://go.dev/dl/go${GO_VERSION}.linux-amd64.tar.gz"
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz"
+          rm "go${GO_VERSION}.linux-amd64.tar.gz"
+          export PATH=/usr/local/go/bin:$HOME/go/bin:$PATH
+          go version
+
+          echo "=== Setting up arm64 cross-compilation libraries ==="
+          sudo dpkg --add-architecture arm64
+          sudo sed -i 's/^deb http/deb [arch=amd64] http/' /etc/apt/sources.list 2>/dev/null || true
+          for f in /etc/apt/sources.list.d/*.list; do
+            [ -f "$f" ] && sudo sed -i 's/^deb http/deb [arch=amd64] http/' "$f" 2>/dev/null || true
+          done
+          for f in /etc/apt/sources.list.d/*.sources; do
+            [ -f "$f" ] && ! grep -q "^Architectures:" "$f" && \
+              sudo sed -i '/^Types:/a Architectures: amd64' "$f" 2>/dev/null || true
+          done
+          CODENAME=$(lsb_release -cs)
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME} main universe" \
+            | sudo tee /etc/apt/sources.list.d/arm64-cross.list
+          echo "deb [arch=arm64] http://ports.ubuntu.com/ubuntu-ports ${CODENAME}-updates main universe" \
+            | sudo tee -a /etc/apt/sources.list.d/arm64-cross.list
+          sudo apt-get update
+          sudo apt-get install -y libpcap-dev:arm64 libusb-1.0-0-dev:arm64 \
+            libnetfilter-queue-dev:arm64 2>/dev/null || \
+            sudo apt-get install -y libpcap-dev:arm64 libusb-1.0-0-dev:arm64 || \
+            sudo apt-get install -y libpcap-dev:arm64
+
+          mkdir -p stage3/03-bettercap-pwngrid/files
+
+          echo "=== Cross-compiling bettercap for arm64 ==="
+          git clone --depth 1 https://github.com/bettercap/bettercap.git /tmp/bettercap-src
+          cd /tmp/bettercap-src
+          CC=aarch64-linux-gnu-gcc \
+          CGO_ENABLED=1 \
+          GOOS=linux \
+          GOARCH=arm64 \
+          PKG_CONFIG_PATH=/usr/lib/aarch64-linux-gnu/pkgconfig \
+          CGO_LDFLAGS="-L/usr/lib/aarch64-linux-gnu" \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/bettercap" .
+          echo "bettercap: OK"
+
+          echo "=== Cross-compiling pwngrid for arm64 ==="
+          git clone --depth 1 https://github.com/jayofelony/pwngrid.git /tmp/pwngrid-src
+          cd /tmp/pwngrid-src
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/pwngrid" . 2>/dev/null || \
+          CGO_ENABLED=0 GOOS=linux GOARCH=arm64 \
+            go build -trimpath -o "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/pwngrid" ./cmd/pwngrid
+          echo "pwngrid: OK"
+
+          echo "=== Pre-built binaries ==="
+          ls -la "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/"
+          file "$GITHUB_WORKSPACE/stage3/03-bettercap-pwngrid/files/"*
 
       - name: Build 64-bit image
         run: |
