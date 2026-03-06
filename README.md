@@ -1,18 +1,22 @@
 # pwn-gen-bumchinz
 
-Custom Pwnagotchi image builder by **Mr Bumchinz** - based on jayofelony's pwn-gen.
+Custom Pwnagotchi image builder by **Mr Bumchinz** - based on [jayofelony's pwn-gen](https://github.com/jayofelony/pwn-gen).
+
+Produces flashable `.img.xz` files for Raspberry Pi SD cards.
 
 ## What's Different
 
 This fork includes:
-- **PwnaUI** - Custom theme engine with native C renderer
+- **PwnaUI** - Native C theme engine with 17+ themes (pwnachu, pwnaflipper, hologram, mikugotchi, rick-sanchez, and more)
+- **WebUI** - Browser-based control at `http://<device>.local/crackcity.html`
+- **Bluetooth GPS** - Wardriving support via phone GPS over Bluetooth
+- **Hostname/mDNS Sync** - Device name from config auto-syncs to system hostname
 - **Mode Toggle** - PiSugar button support for AUTO/MANU/AI mode switching
 - **Nexmon Stability** - Auto-recovery plugin for WiFi crashes
-- **17+ Themes** - pwnachu, pwnaflipper, hologram, mikugotchi, rick-sanchez, and more
 
 ## Build Requirements
 
-Must build on Debian/Ubuntu Linux (or Docker):
+Must build on Debian/Ubuntu Linux (x86_64). Requires ~20GB free disk space.
 
 ```bash
 sudo apt-get install -y make git quilt qemu-user-static debootstrap zerofree \
@@ -22,29 +26,21 @@ sudo apt-get install -y make git quilt qemu-user-static debootstrap zerofree \
   bmap-tools kmod
 ```
 
-## Setup
+## Setup & Build
 
 ```bash
 # Clone this repo
 git clone https://github.com/MrBumChinz/pwn-gen-bumchinz.git
 cd pwn-gen-bumchinz
 
-# Get pi-gen (the base image builder)
-git clone https://github.com/RPI-Distro/pi-gen.git pi-gen-32bit
-git clone -b arm64 https://github.com/RPI-Distro/pi-gen.git pi-gen-64bit
-```
-
-## Build
-
-```bash
 # Build 32-bit image (works on ALL Pi models: Zero, Zero W, 3, 4, 5)
 make 32bit
 
-# Build 64-bit image (Pi 3, 4, 5 only)
+# Build 64-bit image (Pi 3, 4, 5 only - better performance)
 make 64bit
 ```
 
-Output will be in `~/pwn-build/images/`:
+The Makefile will automatically clone pi-gen if not present. Output will be in `~/images/`:
 - `pwnagotchi-bumchinz-32bit.img.xz`
 - `pwnagotchi-bumchinz-64bit.img.xz`
 
@@ -53,21 +49,27 @@ Output will be in `~/pwn-build/images/`:
 | Stage | Description |
 |-------|-------------|
 | 00-pre-pwn | Pre-installation hooks |
-| 01-pwn-packages | System packages (aircrack-ng, python3, bluez, etc) |
-| 02-libpcap | libpcap compilation |
+| 01-pwn-packages | System packages + Rust (aircrack-ng, python3, bluez, etc) |
+| 02-libpcap | libpcap 1.9 from source |
 | 03-bettercap-pwngrid | Go + bettercap + pwngrid |
-| 04-nexmon | Monitor mode firmware |
+| 04-nexmon | Nexmon monitor mode firmware |
 | 05-install-pwnagotchi | Clone & install from **MrBumChinz/Pwnagotchi-Fork** |
-| 06-hcxtools | Hashcat tools |
-| 07-patches | Service files and configs |
-| 08-pwnaui | **Custom theme engine** |
-| 09-bumchinz-extras | **Mode toggle + stability plugins** |
+| 06-hcxtools | hcxpcapngtool for hashcat conversion |
+| 07-patches | Service files, configs, boot settings |
+| 08-pwnaui | **PwnaUI native renderer + WebUI + BT GPS + themes** |
+| 09-bumchinz-extras | **Mode toggle + nexmon stability plugin** |
 
-## Docker Build (Windows/Mac)
+## GitHub Actions (CI)
 
-If you don't have a Linux machine:
+Builds run automatically on tag push (`v*`) or manual dispatch via the Actions tab.
+Artifacts are uploaded and releases are created automatically.
+
+## Docker Build (Alternative)
+
+If you don't have a native Linux machine:
 
 ```bash
+# After make setup (or manually clone pi-gen)
 ./pi-gen-32bit/build-docker.sh -c config-32bit
 ./pi-gen-64bit/build-docker.sh -c config-64bit
 ```
@@ -75,16 +77,18 @@ If you don't have a Linux machine:
 ## Flash
 
 Use any of:
-- Raspberry Pi Imager
-- balenaEtcher
-- `dd` command
+- [Raspberry Pi Imager](https://www.raspberrypi.com/software/) (recommended)
+- [balenaEtcher](https://www.balena.io/etcher/)
+- `xzcat image.img.xz | sudo dd of=/dev/sdX bs=4M status=progress`
+
+Default credentials: `pi` / `raspberry`
 
 ## Credits
 
-- jayofelony - Original pwnagotchi maintainer & pwn-gen creator
-- evilsocket - Original pwnagotchi creator
-- RPi-Distro - pi-gen image builder
-- Mr Bumchinz - This fork
+- [jayofelony](https://github.com/jayofelony) - Original pwnagotchi maintainer & pwn-gen creator
+- [evilsocket](https://github.com/evilsocket) - Original pwnagotchi creator
+- [RPi-Distro](https://github.com/RPi-Distro/pi-gen) - pi-gen image builder
+- **Mr Bumchinz** - This fork
 
 ## License
 

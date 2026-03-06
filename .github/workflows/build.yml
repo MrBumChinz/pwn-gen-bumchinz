@@ -23,6 +23,23 @@ jobs:
     timeout-minutes: 360
     
     steps:
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          # Remove large pre-installed packages to free ~20GB
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+            /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/share/swift /usr/local/graalvm /usr/local/share/chromium \
+            /usr/local/lib/node_modules /opt/az 2>/dev/null || true
+          sudo apt-get purge -y \
+            google-cloud-cli azure-cli microsoft-edge-stable \
+            google-chrome-stable dotnet-* aspnetcore-* 2>/dev/null || true
+          sudo apt-get autoremove -y 2>/dev/null || true
+          sudo apt-get clean
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Checkout pwn-gen-bumchinz
         uses: actions/checkout@v4
 
@@ -33,40 +50,42 @@ jobs:
             coreutils quilt parted qemu-user-static debootstrap zerofree zip \
             dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
             file git curl bc gpg pigz xxd arch-test bmap-tools kmod \
-            qemu-utils qemu-system-arm
+            qemu-utils qemu-system-arm qemu-user gcc-arm-linux-gnueabihf
 
       - name: Clone pi-gen 32bit
         run: |
           git clone --depth 1 https://github.com/RPI-Distro/pi-gen.git pi-gen-32bit
 
-      - name: Configure build paths
+      - name: Configure build
         run: |
-          mkdir -p $HOME/pwn-build/work-32bit
-          mkdir -p $HOME/pwn-build/images
-          
-          # Update config with actual home path
-          sed -i "s|\${HOME}|$HOME|g" config-32bit
+          # Set absolute paths in config (avoid ${HOME} expansion issues with sudo)
+          RUNNER_HOME="$HOME"
+          mkdir -p "${RUNNER_HOME}/pwn-build/work-32bit"
+          mkdir -p "${RUNNER_HOME}/pwn-build/images"
+          sed -i "s|^WORK_DIR=.*|WORK_DIR=\"${RUNNER_HOME}/pwn-build/work-32bit\"|" config-32bit
+          sed -i "s|^DEPLOY_DIR=.*|DEPLOY_DIR=\"${RUNNER_HOME}/pwn-build/images\"|" config-32bit
+          echo "=== Config ==="
+          cat config-32bit
 
       - name: Build 32-bit image
         run: |
           sudo ./pi-gen-32bit/build.sh -c config-32bit
 
-      - name: Compress and prepare artifact
+      - name: Prepare artifact
         run: |
-          cd $HOME/pwn-build/images
-          ls -la
-          # Find the image file
-          IMAGE=$(find . -name "*.img" | head -1)
-          if [ -n "$IMAGE" ]; then
-            xz -9 -T0 "$IMAGE"
-          fi
+          # pi-gen with DEPLOY_COMPRESSION=xz already produces .img.xz
+          echo "=== Build output ==="
+          sudo ls -lah $HOME/pwn-build/images/ || true
+          # Fix ownership so upload-artifact can read the files
+          sudo chown -R $USER:$USER $HOME/pwn-build/images/ 2>/dev/null || true
 
       - name: Upload 32-bit image
         uses: actions/upload-artifact@v4
         with:
           name: pwnagotchi-bumchinz-32bit
-          path: ~/pwn-build/images/*.img.xz
+          path: ~/pwn-build/images/*pwnagotchi-bumchinz-32bit*
           retention-days: 30
+          if-no-files-found: error
 
   build-64bit:
     if: ${{ github.event_name == 'push' || github.event.inputs.architecture == '64bit' || github.event.inputs.architecture == 'both' }}
@@ -74,6 +93,22 @@ jobs:
     timeout-minutes: 360
     
     steps:
+      - name: Free disk space
+        run: |
+          echo "=== Disk space before cleanup ==="
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android \
+            /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost \
+            /usr/share/swift /usr/local/graalvm /usr/local/share/chromium \
+            /usr/local/lib/node_modules /opt/az 2>/dev/null || true
+          sudo apt-get purge -y \
+            google-cloud-cli azure-cli microsoft-edge-stable \
+            google-chrome-stable dotnet-* aspnetcore-* 2>/dev/null || true
+          sudo apt-get autoremove -y 2>/dev/null || true
+          sudo apt-get clean
+          echo "=== Disk space after cleanup ==="
+          df -h /
+
       - name: Checkout pwn-gen-bumchinz
         uses: actions/checkout@v4
 
@@ -84,39 +119,39 @@ jobs:
             coreutils quilt parted qemu-user-static debootstrap zerofree zip \
             dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
             file git curl bc gpg pigz xxd arch-test bmap-tools kmod \
-            qemu-utils qemu-system-arm gcc-aarch64-linux-gnu
+            qemu-utils qemu-system-arm qemu-user gcc-aarch64-linux-gnu
 
       - name: Clone pi-gen 64bit
         run: |
           git clone --depth 1 -b arm64 https://github.com/RPI-Distro/pi-gen.git pi-gen-64bit
 
-      - name: Configure build paths
+      - name: Configure build
         run: |
-          mkdir -p $HOME/pwn-build/work-64bit
-          mkdir -p $HOME/pwn-build/images
-          
-          # Update config with actual home path
-          sed -i "s|\${HOME}|$HOME|g" config-64bit
+          RUNNER_HOME="$HOME"
+          mkdir -p "${RUNNER_HOME}/pwn-build/work-64bit"
+          mkdir -p "${RUNNER_HOME}/pwn-build/images"
+          sed -i "s|^WORK_DIR=.*|WORK_DIR=\"${RUNNER_HOME}/pwn-build/work-64bit\"|" config-64bit
+          sed -i "s|^DEPLOY_DIR=.*|DEPLOY_DIR=\"${RUNNER_HOME}/pwn-build/images\"|" config-64bit
+          echo "=== Config ==="
+          cat config-64bit
 
       - name: Build 64-bit image
         run: |
           sudo ./pi-gen-64bit/build.sh -c config-64bit
 
-      - name: Compress and prepare artifact
+      - name: Prepare artifact
         run: |
-          cd $HOME/pwn-build/images
-          ls -la
-          IMAGE=$(find . -name "*.img" | head -1)
-          if [ -n "$IMAGE" ]; then
-            xz -9 -T0 "$IMAGE"
-          fi
+          echo "=== Build output ==="
+          sudo ls -lah $HOME/pwn-build/images/ || true
+          sudo chown -R $USER:$USER $HOME/pwn-build/images/ 2>/dev/null || true
 
       - name: Upload 64-bit image
         uses: actions/upload-artifact@v4
         with:
           name: pwnagotchi-bumchinz-64bit
-          path: ~/pwn-build/images/*.img.xz
+          path: ~/pwn-build/images/*pwnagotchi-bumchinz-64bit*
           retention-days: 30
+          if-no-files-found: error
 
   release:
     needs: [build-32bit, build-64bit]
@@ -137,21 +172,23 @@ jobs:
           path: ./release
 
       - name: Create Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
-          files: ./release/*.img.xz
+          files: ./release/*
           body: |
-            ## Pwnagotchi Mr Bumchinz Edition
+            ## Pwnagotchi Mr Bumchinz Edition ${{ github.ref_name }}
             
             ### Downloads
             - `pwnagotchi-bumchinz-32bit.img.xz` - Works on ALL Pi models (Zero, Zero W, 3, 4, 5)
             - `pwnagotchi-bumchinz-64bit.img.xz` - Pi 3, 4, 5 only (better performance)
             
             ### What's Included
-            - PwnaUI custom theme engine
-            - 17+ themes (pwnachu, pwnaflipper, hologram, mikugotchi, etc)
-            - Mode toggle via PiSugar button
+            - PwnaUI native C theme engine with 17+ themes
+            - Bluetooth GPS receiver for wardriving
+            - Mode toggle via PiSugar button (AUTO/MANU/AI)
             - Nexmon stability plugin
+            - WebUI at http://<device>.local/crackcity.html
+            - Hostname/mDNS sync from config
             
             ### Installation
             1. Download the appropriate image for your Pi
