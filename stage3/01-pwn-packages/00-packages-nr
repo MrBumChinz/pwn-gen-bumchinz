@@ -26,6 +26,7 @@ libopenblas-dev
 libopenjp2-7
 libpcap-dev
 libdtovl0
+libsqlite3-dev
 libssl-dev
 libssl-ocaml-dev
 libtiff6
